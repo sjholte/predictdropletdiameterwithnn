@@ -1,1 +1,217 @@
+# Serena Holte 
+# 06-2022 to 06-2023
+# Use a GUI to input parameters --> output predictions
+# This code outputs droplet diameter with the following inputs:
+    # Orifice width
+    # Capillary spacing
+    # Flow rate ratio
+    # Capillary number (inner and outer)
+    # Regime (dripping vs. jetting)
+    
+from tkinter import ttk
+import tkinter as tk
+import math
+from tensorflow import keras
+import pandas as pd
+import numpy as np
+from keras.callbacks import CSVLogger
 
+def predict():
+    data=np.genfromtxt('gui_input.csv')
+    data=np.asmatrix(data)
+    
+    model1 = keras.models.load_model('predict_regime_model')
+    model2 = keras.models.load_model('predict_diam_model')
+    
+    regime1=model1.predict_on_batch(data)
+    regime=np.argmax(regime1,axis=1)
+    diam=model2.predict_on_batch(data)
+    
+    np.savetxt('regimeprediction.txt',regime)
+    np.savetxt('diamprediction.txt',diam)
+    return regime, diam
+
+
+def build_nn():
+    
+      df=pd.read_csv('ourdata6.csv')
+
+      train = df.sample(frac=0.8, random_state=0)
+      test = df.drop(train.index)
+     
+      x_train=train.iloc[:,0:5]
+      x_test=test.iloc[:,0:5]
+      y_train=train.iloc[:,6]
+      y_test=test.iloc[:,6]
+      y_test=np.asmatrix(y_test)
+    
+    # model predicts droplet diamter
+      model = keras.Sequential()
+      model.add(keras.layers.Dense(64, input_shape=(len(x_train.columns),)))
+      model.add(keras.layers.Dense(16, activation="relu"))
+      model.add(keras.layers.Dense(8, activation="relu"))
+      #model2.add(keras.layers.Dense(2, activation="relu"))
+      model.add(keras.layers.Dense(1, activation="relu"))
+      print(model.summary())
+     
+      optimizer = keras.optimizers.Adam(learning_rate=0.0001)
+      model.compile(optimizer=optimizer, loss='mse')
+      
+      csv_logger = CSVLogger('log2.csv', append=True, separator=';')
+     
+      model.fit(x_train, y_train, batch_size=5, epochs=100, validation_split=0.2, callbacks=[csv_logger])
+
+      model.save('predict_diam_model')
+     
+      return model
+  
+  
+def input_data():
+        
+    def enter_data():
+        
+        capspace=capsp_entry.get()
+        orf=orf_entry.get()
+        regime=regime_combobox.get()
+        flowin=flowin_entry.get()
+        flowout=flowout_entry.get()
+        num=prd_combobox.get()
+        
+        viscoil=0.075
+        viscwater=0.001
+        inttension=0.00683
+        channelarea=math.pi*(0.58*10**-3)**2
+        conv=2.78E-13 # ul/hr to m^3/s conversion
+    
+        capnumo=viscoil*float(flowout)/channelarea*conv/(inttension)
+        capnumi=viscwater*float(flowout)/channelarea*conv/(inttension)
+        flowratio=float(flowout)/float(flowin)
+        
+        if regime == "Dripping":
+            regime=1
+        else:
+            regime=2
+        
+        data=np.array([capspace,orf,flowratio,capnumo,capnumi])
+        np.savetxt('gui_input.csv',data, fmt='%s')
+        
+        if num =="First":
+           build_nn()
+           predict()
+           diampred=open("diamprediction.txt").read()
+           diampred=round(float(diampred),1)
+           
+           regimepred=open("regimeprediction.txt").read()
+           regimepred=round(float(regimepred),0)
+           
+           if regimepred==0.0:
+               regimepredtext='Monodispersed'
+           else:
+               regimepredtext='Polydispersed'
+           
+           window1=tk.Tk()
+           window1.title("Display Prediction")
+            
+           frame1=tk.Frame(window1)
+           frame1.pack()
+           results_frame=tk.LabelFrame(frame1, text="Droplet Diameter Prediction in \u03BCm")
+           results_frame.grid(row=0, column=0, padx=20, pady=10)
+           
+           string_variable = tk.StringVar(results_frame, diampred)
+           
+           results_frame2=tk.LabelFrame(frame1, text="Regime Prediction")
+           results_frame2.grid(row=1, column=0, padx=20, pady=10)
+           string_variable2 = tk.StringVar(results_frame, regimepredtext)
+           
+ 
+           label = tk.Label(results_frame, textvariable=string_variable)
+           label2 = tk.Label(results_frame, textvariable=string_variable2)
+           label.pack()
+           label2.pack()
+ 
+           window1.mainloop()
+       
+        else:
+            predict()
+            
+            diampred=open("diamprediction.txt").read()
+            diampred=round(float(diampred),1)
+            
+            regimepred=open("regimeprediction.txt").read()
+            regimepred=round(float(regimepred),0)
+            
+            if regimepred==0.0:
+                regimepredtext='Monodispersed'
+            else:
+                regimepredtext='Polydispersed'
+             
+            window1=tk.Tk()
+            window1.title("Display Prediction")
+             
+            frame1=tk.Frame(window1)
+            frame1.pack()
+            results_frame=tk.LabelFrame(frame1, text="Droplet Diameter Prediction in \u03BCm")
+            results_frame.grid(row=0, column=0, padx=20, pady=10)
+            
+            string_variable = tk.StringVar(results_frame, diampred)            
+  
+            label = tk.Label(results_frame, textvariable=string_variable)
+            label.pack()
+  
+            window1.mainloop()
+
+
+        return data
+
+    window=tk.Tk()
+    window.title("Data Entry")
+    
+    frame=tk.Frame(window)
+    frame.pack()
+    
+    fluid_props_frame=tk.LabelFrame(frame, text="Input Parameters")
+    fluid_props_frame.grid(row=0, column=0, padx=20, pady=10)
+    
+    capsp_label=tk.Label(fluid_props_frame, text="Capillary Spacing (\u03BCm)")
+    capsp_label.grid(row=0, column=0)
+    capsp_entry=tk.Entry(fluid_props_frame)
+    capsp_entry.grid(row=1, column=0)
+    
+    orf_label=tk.Label(fluid_props_frame, text="Orifice Width (\u03BCm)")
+    orf_label.grid(row=0, column=1)
+    orf_entry=tk.Entry(fluid_props_frame)
+    orf_entry.grid(row=1, column=1)
+    
+    
+    flowin_label=tk.Label(fluid_props_frame, text="Inner Flow Rate of Water (\u03BCL)")
+    flowin_label.grid(row=2, column=0)
+    flowin_entry=tk.Entry(fluid_props_frame)
+    flowin_entry.grid(row=3, column=0)
+
+    
+    flowout_label=tk.Label(fluid_props_frame, text="Outer Flow Rate of Oil (\u03BCL)")
+    flowout_label.grid(row=2, column=1)
+    flowout_entry=tk.Entry(fluid_props_frame)
+    flowout_entry.grid(row=3, column=1)
+    
+    regime_label=tk.Label(fluid_props_frame, text = "Regime")
+    regime_combobox=ttk.Combobox(fluid_props_frame, values=["Dripping","Jetting"])
+    regime_label.grid(row=4, column=0)
+    regime_combobox.grid(row=5, column=0)
+    
+    prd=tk.Label(fluid_props_frame, text = "Is this the first prediction?")
+    prd_combobox=ttk.Combobox(fluid_props_frame, values=["First","Not the first"])
+    prd.grid(row=4, column=1)
+    prd_combobox.grid(row=5, column=1)
+   
+    
+    for widget in fluid_props_frame.winfo_children():
+        widget.grid_configure(padx=10, pady=5)
+    
+    button=tk.Button(frame, text="Predict", command=enter_data)
+    button.grid(row=1, column=0, sticky="news", padx=20, pady=10)
+    
+    window.mainloop()
+    
+    
+input_data()
