@@ -1,0 +1,29 @@
+import numpy as np
+from sklearn.linear_model import LinearRegression
+import pandas as pd
+
+df=pd.read_csv('ourdata6.csv')
+
+train = df.sample(frac=0.8, random_state=0)
+test = df.drop(train.index)
+ 
+x_train=train.iloc[:, lambda df: [0,1,2,3,4,5]]
+x_test=test.iloc[:, lambda df: [0,1,2,3,4,5]]
+x_test=np.asmatrix(x_test)
+
+y_train=train.iloc[:,6]
+y_test=test.iloc[:,6]
+y_test=np.transpose(np.asmatrix(y_test))
+
+model=LinearRegression().fit(x_train,y_train)
+
+y_pred = model.predict(x_test)
+
+
+np.savetxt("ytestLR.csv", y_test, delimiter=";")
+np.savetxt("ypredLR.csv", y_pred, delimiter=";")
+
+
+
+
+
